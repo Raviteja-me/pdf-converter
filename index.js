@@ -3,22 +3,19 @@ const pdfkit = require('pdfkit');
 const fs = require('fs');
 
 const app = express();
-const port = process.env.PORT || 3000;  // For cloud deployment
-
-// Add middleware to parse JSON
-app.use(express.json());
+const port = process.env.PORT || 3000;
 
 // Test endpoint
 app.get('/', (req, res) => {
     res.send('PDF Converter API is running!');
 });
 
-// Enhanced PDF generation endpoint
-app.post('/create-pdf', (req, res) => {
-    const { text } = req.body;
+// Modified PDF generation endpoint to use query parameters
+app.get('/create-pdf', (req, res) => {
+    const text = req.query.text;
     
     if (!text) {
-        return res.status(400).json({ error: 'Text content is required' });
+        return res.status(400).json({ error: 'Text parameter is required. Use ?text=YourText' });
     }
 
     const doc = new pdfkit();
