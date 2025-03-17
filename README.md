@@ -1,13 +1,13 @@
 # PDF Converter API
 
-A simple API that converts text to PDF using Node.js and PDFKit.
+A simple API that converts text and HTML to PDF using Node.js.
 
 ## Endpoints
 
-### POST /create-pdf
-Converts text to PDF
+### GET /create-pdf
+Converts text to PDF using query parameters
 
-Request body:
+Example:
 ```json
 {
     "text": "Your text here"
