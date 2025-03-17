@@ -1,7 +1,6 @@
 const express = require('express');
 const pdfkit = require('pdfkit');
-const pdf = require('html-pdf');
-const fs = require('fs');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -15,7 +14,7 @@ app.get('/', (req, res) => {
     res.send('PDF Converter API is running!');
 });
 
-// Text to PDF endpoint (unchanged)
+// Text to PDF endpoint
 app.get('/create-pdf', (req, res) => {
     const text = req.query.text;
     
@@ -31,76 +30,73 @@ app.get('/create-pdf', (req, res) => {
     doc.end();
 });
 
-// Modified HTML to PDF endpoint with enhanced styling
-app.post('/html-to-pdf', (req, res) => {
+// Modified HTML to PDF endpoint using Puppeteer
+app.post('/html-to-pdf', async (req, res) => {
     const html = req.body.html;
     
     if (!html) {
         return res.status(400).json({ error: 'HTML content is required in request body' });
     }
 
-    // Default styling for better PDF output
-    const defaultStyle = `
-        <style>
-            body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; }
-            h1 { color: #2c3e50; margin-bottom: 0.5em; }
-            h2 { color: #3498db; margin-top: 1em; }
-            .section { margin: 1em 0; }
-            .header { text-align: center; margin-bottom: 2em; }
-            .contact-info { color: #666; }
-            ul { padding-left: 20px; }
-            li { margin-bottom: 0.5em; }
-            .skills { display: flex; flex-wrap: wrap; gap: 10px; }
-            .skill-tag { 
-                background: #f0f0f0; 
-                padding: 5px 10px; 
-                border-radius: 15px; 
-                font-size: 0.9em; 
-            }
-        </style>
-    `;
+    try {
+        // Configure Puppeteer options based on environment
+        const options = process.env.K_SERVICE ? {
+            // Cloud Run configuration
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage'
+            ],
+            headless: 'new',
+            executablePath: '/usr/bin/chromium'
+        } : {
+            // Local configuration
+            headless: 'new'
+        };
 
-    // Wrap HTML content with default styling
-    const enhancedHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            ${defaultStyle}
-        </head>
-        <body>
-            ${html}
-        </body>
-        </html>
-    `;
-
-    const options = {
-        format: 'A4',
-        border: {
-            top: '2cm',
-            right: '2cm',
-            bottom: '2cm',
-            left: '2cm'
-        },
-        timeout: '120000',
-        footer: {
-            height: '1cm',
-            contents: {
-                default: '<div style="text-align: center; color: #888; font-size: 8pt;">Page {{page}} of {{pages}}</div>'
-            }
-        }
-    };
-
-    pdf.create(enhancedHtml, options).toBuffer((err, buffer) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Failed to convert HTML to PDF' });
-        }
+        const browser = await puppeteer.launch(options);
+        const page = await browser.newPage();
         
+        // Add default styling
+        const styledHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; }
+                    h1 { color: #2c3e50; margin-bottom: 0.5em; }
+                    h2 { color: #3498db; margin-top: 1em; }
+                </style>
+            </head>
+            <body>
+                ${html}
+            </body>
+            </html>
+        `;
+
+        await page.setContent(styledHtml);
+        
+        const pdf = await page.pdf({
+            format: 'A4',
+            margin: {
+                top: '2cm',
+                right: '2cm',
+                bottom: '2cm',
+                left: '2cm'
+            },
+            printBackground: true
+        });
+
+        await browser.close();
+
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="resume.pdf"');
-        res.send(buffer);
-    });
+        res.setHeader('Content-Disposition', 'attachment; filename="webpage.pdf"');
+        res.send(pdf);
+
+    } catch (error) {
+        console.error('PDF Generation Error:', error);
+        res.status(500).json({ error: 'Failed to convert HTML to PDF' });
+    }
 });
 
 app.listen(port, () => {

@@ -11,8 +11,8 @@
   "description": "",
   "dependencies": {
     "express": "^4.21.2",
-    "html-pdf": "^3.0.1",
     "pdfkit": "^0.16.0",
-    "puppeteer": "^24.4.0"
+    "puppeteer": "^24.4.0",
+    "puppeteer-core": "^24.4.0"
   }
 }
