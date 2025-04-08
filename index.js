@@ -1,60 +1,155 @@
 const express = require('express');
-const pdfkit = require('pdfkit');
-const htmlPdf = require('html-pdf-node');
+const puppeteer = require('puppeteer');
+const { PDFDocument } = require('pdf-lib');
+const Handlebars = require('handlebars');
+const cors = require('cors');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080; // Updated to standard GCP port
 
-app.use(express.json({limit: '50mb'}));
-app.use(express.urlencoded({limit: '50mb', extended: true}));
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
-app.get('/', (req, res) => {
-    res.send('PDF Converter API is running!');
-});
+// Initialize puppeteer browser with more robust options
+let browser;
+(async () => {
+    browser = await puppeteer.launch({
+        headless: 'new',
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--window-size=1920x1080',
+            '--font-render-hinting=none'
+        ],
+        defaultViewport: {
+            width: 1920,
+            height: 1080,
+            deviceScaleFactor: 2
+        }
+    });
+})();
 
-// Text to PDF endpoint (unchanged)
-app.get('/create-pdf', (req, res) => {
-    const text = req.query.text;
-    
-    if (!text) {
-        return res.status(400).json({ error: 'Text parameter is required' });
-    }
-
-    const doc = new pdfkit();
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="output.pdf"');
-    doc.pipe(res);
-    doc.fontSize(12).text(text);
-    doc.end();
-});
-
-// Simplified HTML to PDF endpoint
+// Enhanced HTML to PDF conversion
 app.post('/html-to-pdf', async (req, res) => {
-    const html = req.body.html;
-    
+    const { html, options = {} } = req.body;
+
     if (!html) {
         return res.status(400).json({ error: 'HTML content is required' });
     }
 
+    let page;
     try {
-        const options = {
-            format: 'A4',
-            margin: { top: 20, right: 20, bottom: 20, left: 20 }
-        };
-        
-        const file = { content: html };
-        const pdfBuffer = await htmlPdf.generatePdf(file, options);
+        // Ensure browser is available
+        if (!browser) {
+            browser = await puppeteer.launch({
+                headless: 'new',
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage'
+                ]
+            });
+        }
 
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename="webpage.pdf"');
-        res.send(pdfBuffer);
+        page = await browser.newPage();
+        
+        // Set content directly without viewport manipulation
+        await page.setContent(html, {
+            waitUntil: 'networkidle0',
+            timeout: 30000
+        });
+
+        // Generate PDF with simplified options
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true
+        });
+
+        // Clear any previous headers
+        res.removeHeader('Content-Type');
+        res.removeHeader('Content-Disposition');
+        
+        // Set binary response headers
+        res.writeHead(200, {
+            'Content-Type': 'application/pdf',
+            'Content-Length': pdfBuffer.length,
+            'Content-Disposition': 'attachment; filename="document.pdf"'
+        });
+        
+        // End response with buffer
+        res.end(pdfBuffer);
 
     } catch (error) {
         console.error('PDF Generation Error:', error);
-        res.status(500).json({ error: 'Failed to convert HTML to PDF' });
+        if (!res.headersSent) {
+            res.status(500).json({
+                error: 'Failed to convert HTML to PDF',
+                details: error.message
+            });
+        }
+    } finally {
+        if (page) {
+            try {
+                await page.close();
+            } catch (e) {
+                console.error('Error closing page:', e);
+            }
+        }
+    }
+});
+
+// Text to PDF with enhanced features
+app.post('/text-to-pdf', async (req, res) => {
+    const { text, options = {} } = req.body;
+
+    if (!text) {
+        return res.status(400).json({ error: 'Text content is required' });
+    }
+
+    try {
+        const pdfDoc = await PDFDocument.create();
+        const page = pdfDoc.addPage([595.28, 841.89]); // A4 size
+        
+        const { fontSize = 12, fontFamily = 'Helvetica' } = options;
+        
+        page.drawText(text, {
+            x: 50,
+            y: page.getHeight() - 50,
+            size: fontSize,
+            maxWidth: page.getWidth() - 100
+        });
+
+        const pdfBytes = await pdfDoc.save();
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${options.filename || 'document.pdf'}"`);
+        res.send(Buffer.from(pdfBytes));
+
+    } catch (error) {
+        console.error('PDF Generation Error:', error);
+        res.status(500).json({
+            error: 'Failed to convert text to PDF',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// Error handling
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    if (!res.headersSent) {
+        res.status(500).json({
+            error: 'Something went wrong!',
+            details: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
     }
 });
 
 app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+    console.log(`Enhanced PDF Converter running at http://localhost:${port}`);
 });
