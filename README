@@ -1,0 +1,105 @@
+
+
+
+          
+# LazyJobSeeker PDF Converter
+
+A powerful API service for converting HTML and text content to high-quality PDF documents.
+
+## Features
+
+### HTML to PDF Conversion
+- **Full HTML Support**: Convert any HTML content to PDF with complete CSS styling support
+- **Image Support**: Renders images, icons, and other media elements in the generated PDFs
+- **Font Support**: Properly renders custom fonts and ensures they are loaded before PDF generation
+- **Background Elements**: Preserves background colors, images, and styling in the output PDF
+- **High Resolution**: Generates PDFs at 2x device scale factor for crisp text and images
+- **Custom Page Settings**: Supports custom page formats and margin configurations
+
+### Text to PDF Conversion
+- **Simple Text Formatting**: Convert plain text to well-formatted PDF documents
+- **Font Customization**: Adjust font size and family for text-based PDFs
+- **Custom Filename**: Specify custom filenames for the generated PDFs
+
+### Technical Features
+- **High Performance**: Optimized for handling large documents and complex layouts
+- **Cross-Origin Support**: Built-in CORS support for cross-domain requests
+- **Large Payload Support**: Handles payloads up to 100MB for processing large documents
+- **Error Handling**: Comprehensive error handling with detailed error messages
+- **Cloud-Ready**: Optimized for deployment on Google Cloud Platform (App Engine)
+- **Containerized**: Docker support for easy deployment in any environment
+
+## API Endpoints
+
+### HTML to PDF
+```
+POST /html-to-pdf
+```
+
+**Request Body:**
+```json
+{
+  "html": "<html>Your HTML content here</html>",
+  "options": {
+    "format": "A4",
+    "printBackground": true
+  }
+}
+```
+
+### Text to PDF
+```
+POST /text-to-pdf
+```
+
+**Request Body:**
+```json
+{
+  "text": "Your plain text content here",
+  "options": {
+    "fontSize": 12,
+    "fontFamily": "Helvetica",
+    "filename": "document.pdf"
+  }
+}
+```
+
+## Deployment
+
+### Local Development
+```bash
+npm install
+npm start
+```
+
+### Docker Deployment
+```bash
+docker build -t pdf-converter .
+docker run -p 8080:8080 pdf-converter
+```
+
+### Google Cloud Platform Deployment
+```bash
+./deploy.sh
+```
+
+## Technical Stack
+- **Node.js**: Runtime environment
+- **Express**: Web framework
+- **Puppeteer**: Headless Chrome for HTML rendering
+- **PDF-Lib**: PDF generation library
+- **Handlebars**: Template engine support
+- **Docker**: Containerization
+- **Google Cloud Platform**: Cloud hosting
+
+## Project Structure
+- `index.js`: Main application file with API endpoints
+- `Dockerfile`: Container configuration
+- `app.yaml`: Google Cloud App Engine configuration
+- `deploy.sh`: Deployment script for GCP
+- `.gcloudignore` & `.gitignore`: Exclusion files for deployment and version control
+
+## License
+ISC
+
+        Too many current requests. Your queue position is 1. Please wait for a while or switch to other models for a smoother experience.
