@@ -101,10 +101,10 @@ app.post('/html-to-pdf', async (req, res) => {
             printBackground: true,
             preferCSSPageSize: true,
             margin: {
-                top: '0px',
-                right: '0px',
-                bottom: '0px',
-                left: '0px'
+                top: '0.5in',
+                right: '0.5in',
+                bottom: '0.5in',
+                left: '0.5in'
             }
         });
 
