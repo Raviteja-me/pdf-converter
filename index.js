@@ -89,8 +89,35 @@ app.post('/html-to-pdf', async (req, res) => {
 
         page = await browser.newPage();
         
+        // Add CSS to remove default margins if margin is null
+        let processedHtml = html;
+        if (options.margin === null) {
+            // Add CSS to remove all margins and padding
+            const noMarginCSS = `
+                <style>
+                    * {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        box-sizing: border-box !important;
+                    }
+                    body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                    }
+                    html {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                </style>
+            `;
+            processedHtml = noMarginCSS + html;
+            console.log('✅ Added CSS to remove HTML margins');
+        }
+        
         // Set content directly without viewport manipulation
-        await page.setContent(html, {
+        await page.setContent(processedHtml, {
             waitUntil: 'networkidle0',
             timeout: 30000
         });
@@ -108,25 +135,34 @@ app.post('/html-to-pdf', async (req, res) => {
         };
 
         // Handle margin configuration
-        if (options.margin === null || options.margin === undefined) {
+        console.log('=== MARGIN DEBUGGING ===');
+        console.log('options.margin value:', options.margin);
+        console.log('options.margin type:', typeof options.margin);
+        console.log('options.margin === null:', options.margin === null);
+        console.log('options.margin === undefined:', options.margin === undefined);
+        console.log('options.margin && typeof options.margin === "object":', options.margin && typeof options.margin === 'object');
+        
+        if (options.margin === null) {
             // No margins - set all margins to 0
             pdfOptions.margin = {
-                top: 0,
-                right: 0,
-                bottom: 0,
-                left: 0
+                top: '0mm',
+                right: '0mm',
+                bottom: '0mm',
+                left: '0mm'
             };
             // Don't use preferCSSPageSize when margins are explicitly set
             pdfOptions.preferCSSPageSize = false;
-            console.log('Setting margins to 0 (no margins)');
+            // Force disable CSS page size
+            pdfOptions.displayHeaderFooter = false;
+            console.log('✅ Setting margins to 0 (no margins)');
         } else if (options.margin && typeof options.margin === 'object') {
             // Custom margins provided by user
             pdfOptions.margin = options.margin;
             // Don't use preferCSSPageSize when margins are explicitly set
             pdfOptions.preferCSSPageSize = false;
-            console.log('Setting custom margins:', options.margin);
+            console.log('✅ Setting custom margins:', options.margin);
         } else {
-            // Default margins (0.5 inches on all sides)
+            // Default margins (0.5 inches on all sides) - when no margin parameter or margin is undefined
             pdfOptions.margin = {
                 top: '0.5in',
                 right: '0.5in',
@@ -135,10 +171,11 @@ app.post('/html-to-pdf', async (req, res) => {
             };
             // Use preferCSSPageSize for default behavior
             pdfOptions.preferCSSPageSize = true;
-            console.log('Using default margins (0.5 inches)');
+            console.log('✅ Using default margins (0.5 inches)');
         }
         
-        console.log('Final PDF options:', pdfOptions);
+        console.log('Final PDF options:', JSON.stringify(pdfOptions, null, 2));
+        console.log('=== END MARGIN DEBUGGING ===');
         
         // Generate PDF with configured options
         const pdfBuffer = await page.pdf(pdfOptions);
