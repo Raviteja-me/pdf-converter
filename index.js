@@ -89,9 +89,9 @@ app.post('/html-to-pdf', async (req, res) => {
 
         page = await browser.newPage();
         
-        // Add CSS to remove default margins if margin is null
+        // Add CSS to remove default margins if margin is null or undefined (default no-margin behavior)
         let processedHtml = html;
-        if (options.margin === null) {
+        if (options.margin === null || options.margin === undefined) {
             // Add CSS to remove all margins and padding
             const noMarginCSS = `
                 <style>
@@ -113,7 +113,7 @@ app.post('/html-to-pdf', async (req, res) => {
                 </style>
             `;
             processedHtml = noMarginCSS + html;
-            console.log('✅ Added CSS to remove HTML margins');
+            console.log('✅ Added CSS to remove HTML margins (default no-margin behavior)');
         }
         
         // Set content directly without viewport manipulation
@@ -142,8 +142,8 @@ app.post('/html-to-pdf', async (req, res) => {
         console.log('options.margin === undefined:', options.margin === undefined);
         console.log('options.margin && typeof options.margin === "object":', options.margin && typeof options.margin === 'object');
         
-        if (options.margin === null) {
-            // No margins - set all margins to 0
+        if (options.margin === null || options.margin === undefined) {
+            // Default: No margins (0mm) - when no margin parameter or margin is null/undefined
             pdfOptions.margin = {
                 top: '0mm',
                 right: '0mm',
@@ -154,7 +154,7 @@ app.post('/html-to-pdf', async (req, res) => {
             pdfOptions.preferCSSPageSize = false;
             // Force disable CSS page size
             pdfOptions.displayHeaderFooter = false;
-            console.log('✅ Setting margins to 0 (no margins)');
+            console.log('✅ Using default: NO MARGINS (0mm)');
         } else if (options.margin && typeof options.margin === 'object') {
             // Custom margins provided by user
             pdfOptions.margin = options.margin;
@@ -162,16 +162,16 @@ app.post('/html-to-pdf', async (req, res) => {
             pdfOptions.preferCSSPageSize = false;
             console.log('✅ Setting custom margins:', options.margin);
         } else {
-            // Default margins (0.5 inches on all sides) - when no margin parameter or margin is undefined
+            // Fallback: No margins (0mm) for any other case
             pdfOptions.margin = {
-                top: '0.5in',
-                right: '0.5in',
-                bottom: '0.5in',
-                left: '0.5in'
+                top: '0mm',
+                right: '0mm',
+                bottom: '0mm',
+                left: '0mm'
             };
-            // Use preferCSSPageSize for default behavior
-            pdfOptions.preferCSSPageSize = true;
-            console.log('✅ Using default margins (0.5 inches)');
+            pdfOptions.preferCSSPageSize = false;
+            pdfOptions.displayHeaderFooter = false;
+            console.log('✅ Fallback: NO MARGINS (0mm)');
         }
         
         console.log('Final PDF options:', JSON.stringify(pdfOptions, null, 2));
