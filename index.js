@@ -70,12 +70,6 @@ app.post('/html-to-pdf', async (req, res) => {
         return res.status(400).json({ error: 'HTML content is required' });
     }
 
-    // Debug logging
-    console.log('Received request body:', JSON.stringify(req.body, null, 2));
-    console.log('Options received:', options);
-    console.log('Margin value:', options.margin);
-    console.log('Margin type:', typeof options.margin);
-
     let page;
     try {
         // Ensure browser is available
@@ -89,35 +83,8 @@ app.post('/html-to-pdf', async (req, res) => {
 
         page = await browser.newPage();
         
-        // Add CSS to remove default margins if margin is null or undefined (default no-margin behavior)
-        let processedHtml = html;
-        if (options.margin === null || options.margin === undefined) {
-            // Add CSS to remove all margins and padding
-            const noMarginCSS = `
-                <style>
-                    * {
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        box-sizing: border-box !important;
-                    }
-                    body {
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        width: 100% !important;
-                        height: 100% !important;
-                    }
-                    html {
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-                </style>
-            `;
-            processedHtml = noMarginCSS + html;
-            console.log('✅ Added CSS to remove HTML margins (default no-margin behavior)');
-        }
-        
         // Set content directly without viewport manipulation
-        await page.setContent(processedHtml, {
+        await page.setContent(html, {
             waitUntil: 'networkidle0',
             timeout: 30000
         });
@@ -135,47 +102,31 @@ app.post('/html-to-pdf', async (req, res) => {
         };
 
         // Handle margin configuration
-        console.log('=== MARGIN DEBUGGING ===');
-        console.log('options.margin value:', options.margin);
-        console.log('options.margin type:', typeof options.margin);
-        console.log('options.margin === null:', options.margin === null);
-        console.log('options.margin === undefined:', options.margin === undefined);
-        console.log('options.margin && typeof options.margin === "object":', options.margin && typeof options.margin === 'object');
-        
-        if (options.margin === null || options.margin === undefined) {
-            // Default: No margins (0mm) - when no margin parameter or margin is null/undefined
-            pdfOptions.margin = {
-                top: '0mm',
-                right: '0mm',
-                bottom: '0mm',
-                left: '0mm'
-            };
-            // Don't use preferCSSPageSize when margins are explicitly set
+        if (options.margin) {
+            if (typeof options.margin === 'number') {
+                // Single number - apply to all sides
+                const marginValue = options.margin + 'in';
+                pdfOptions.margin = {
+                    top: marginValue,
+                    right: marginValue,
+                    bottom: marginValue,
+                    left: marginValue
+                };
+            } else if (typeof options.margin === 'object') {
+                // Object with specific values
+                pdfOptions.margin = options.margin;
+            }
             pdfOptions.preferCSSPageSize = false;
-            // Force disable CSS page size
-            pdfOptions.displayHeaderFooter = false;
-            console.log('✅ Using default: NO MARGINS (0mm)');
-        } else if (options.margin && typeof options.margin === 'object') {
-            // Custom margins provided by user
-            pdfOptions.margin = options.margin;
-            // Don't use preferCSSPageSize when margins are explicitly set
-            pdfOptions.preferCSSPageSize = false;
-            console.log('✅ Setting custom margins:', options.margin);
         } else {
-            // Fallback: No margins (0mm) for any other case
+            // Default: No margins
             pdfOptions.margin = {
-                top: '0mm',
-                right: '0mm',
-                bottom: '0mm',
-                left: '0mm'
+                top: '0px',
+                right: '0px',
+                bottom: '0px',
+                left: '0px'
             };
-            pdfOptions.preferCSSPageSize = false;
-            pdfOptions.displayHeaderFooter = false;
-            console.log('✅ Fallback: NO MARGINS (0mm)');
+            pdfOptions.preferCSSPageSize = true;
         }
-        
-        console.log('Final PDF options:', JSON.stringify(pdfOptions, null, 2));
-        console.log('=== END MARGIN DEBUGGING ===');
         
         // Generate PDF with configured options
         const pdfBuffer = await page.pdf(pdfOptions);
