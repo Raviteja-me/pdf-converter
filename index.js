@@ -95,18 +95,37 @@ app.post('/html-to-pdf', async (req, res) => {
         // Ensure all content is properly rendered
         await page.evaluateHandle('document.fonts.ready');
         
-        // Generate PDF with enhanced options for background rendering
-        const pdfBuffer = await page.pdf({
+        // Prepare PDF options
+        const pdfOptions = {
             format: 'A4',
             printBackground: true,
-            preferCSSPageSize: true,
-            margin: {
+            preferCSSPageSize: true
+        };
+
+        // Handle margin configuration
+        if (options.margin === null) {
+            // No margins - set all margins to 0
+            pdfOptions.margin = {
+                top: '0in',
+                right: '0in',
+                bottom: '0in',
+                left: '0in'
+            };
+        } else if (options.margin && typeof options.margin === 'object') {
+            // Custom margins provided by user
+            pdfOptions.margin = options.margin;
+        } else {
+            // Default margins (0.5 inches on all sides)
+            pdfOptions.margin = {
                 top: '0.5in',
                 right: '0.5in',
                 bottom: '0.5in',
                 left: '0.5in'
-            }
-        });
+            };
+        }
+        
+        // Generate PDF with configured options
+        const pdfBuffer = await page.pdf(pdfOptions);
 
         // Clear any previous headers
         res.removeHeader('Content-Type');

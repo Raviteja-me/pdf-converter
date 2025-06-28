@@ -1,7 +1,3 @@
-
-
-
-          
 # LazyJobSeeker PDF Converter
 
 A powerful API service for converting HTML and text content to high-quality PDF documents.
@@ -15,6 +11,7 @@ A powerful API service for converting HTML and text content to high-quality PDF 
 - **Background Elements**: Preserves background colors, images, and styling in the output PDF
 - **High Resolution**: Generates PDFs at 2x device scale factor for crisp text and images
 - **Custom Page Settings**: Supports custom page formats and margin configurations
+- **Flexible Margins**: Configurable margins - use default (0.5in), custom margins, or no margins at all
 
 ### Text to PDF Conversion
 - **Simple Text Formatting**: Convert plain text to well-formatted PDF documents
@@ -42,8 +39,295 @@ POST /html-to-pdf
   "html": "<html>Your HTML content here</html>",
   "options": {
     "format": "A4",
+    "printBackground": true,
+    "preferCSSPageSize": true,
+    "margin": null
+  }
+}
+```
+
+**Margin Options:**
+- `margin: null` - No margins (0 inches on all sides)
+- `margin: { top: "1in", right: "0.5in", bottom: "1in", left: "0.5in" }` - Custom margins
+- No margin specified - Default margins (0.5 inches on all sides)
+
+**All Available Options:**
+
+#### 1. Margin Configuration
+
+**No Margins (Full Bleed):**
+```json
+{
+  "html": "<html><body><h1>Hello World</h1></body></html>",
+  "options": {
+    "margin": null
+  }
+}
+```
+
+**Custom Margins:**
+```json
+{
+  "html": "<html><body><h1>Hello World</h1></body></html>",
+  "options": {
+    "margin": {
+      "top": "1in",
+      "right": "0.5in", 
+      "bottom": "1in",
+      "left": "0.5in"
+    }
+  }
+}
+```
+
+**Default Margins (0.5 inches on all sides):**
+```json
+{
+  "html": "<html><body><h1>Hello World</h1></body></html>",
+  "options": {}
+}
+```
+
+#### 2. Page Format Options
+
+**A4 Format (Default):**
+```json
+{
+  "html": "<html><body><h1>Hello World</h1></body></html>",
+  "options": {
+    "format": "A4"
+  }
+}
+```
+
+**Letter Format:**
+```json
+{
+  "html": "<html><body><h1>Hello World</h1></body></html>",
+  "options": {
+    "format": "Letter"
+  }
+}
+```
+
+**Legal Format:**
+```json
+{
+  "html": "<body><h1>Hello World</h1></body>",
+  "options": {
+    "format": "Legal"
+  }
+}
+```
+
+**Custom Page Size:**
+```json
+{
+  "html": "<html><body><h1>Hello World</h1></body></html>",
+  "options": {
+    "format": {
+      "width": "8.5in",
+      "height": "11in"
+    }
+  }
+}
+```
+
+#### 3. Background Rendering
+
+**With Background (Default):**
+```json
+{
+  "html": "<html><body style='background-color: yellow;'><h1>Hello World</h1></body></html>",
+  "options": {
     "printBackground": true
   }
+}
+```
+
+**Without Background:**
+```json
+{
+  "html": "<html><body style='background-color: yellow;'><h1>Hello World</h1></body></html>",
+  "options": {
+    "printBackground": false
+  }
+}
+```
+
+#### 4. CSS Page Size Preference
+
+**Prefer CSS Page Size:**
+```json
+{
+  "html": "<html><head><style>@page { size: A3; }</style></head><body><h1>Hello World</h1></body></html>",
+  "options": {
+    "preferCSSPageSize": true
+  }
+}
+```
+
+**Ignore CSS Page Size:**
+```json
+{
+  "html": "<html><head><style>@page { size: A3; }</style></head><body><h1>Hello World</h1></body></html>",
+  "options": {
+    "preferCSSPageSize": false
+  }
+}
+```
+
+**Complete Examples:**
+
+#### Example 1: Professional Document with Margins
+```json
+{
+  "html": "<html><head><style>body { font-family: Arial, sans-serif; line-height: 1.6; }</style></head><body><h1>Business Report</h1><p>This is a professional document with proper margins.</p></body></html>",
+  "options": {
+    "format": "A4",
+    "margin": {
+      "top": "1in",
+      "right": "0.75in",
+      "bottom": "1in",
+      "left": "0.75in"
+    },
+    "printBackground": true,
+    "preferCSSPageSize": true
+  }
+}
+```
+
+#### Example 2: Full Bleed Design (No Margins)
+```json
+{
+  "html": "<html><body style='margin: 0; padding: 0; background: linear-gradient(45deg, #ff6b6b, #4ecdc4); height: 100vh; display: flex; align-items: center; justify-content: center;'><h1 style='color: white; font-size: 3em;'>Full Bleed Design</h1></body></html>",
+  "options": {
+    "margin": null,
+    "printBackground": true
+  }
+}
+```
+
+#### Example 3: Custom Page Size for Brochure
+```json
+{
+  "html": "<html><body style='margin: 0; padding: 20px; background: #f0f0f0;'><h1>Brochure Layout</h1><p>This uses a custom page size for brochure printing.</p></body></html>",
+  "options": {
+    "format": {
+      "width": "8.5in",
+      "height": "5.5in"
+    },
+    "margin": {
+      "top": "0.25in",
+      "right": "0.25in",
+      "bottom": "0.25in",
+      "left": "0.25in"
+    }
+  }
+}
+```
+
+**cURL Examples:**
+
+#### Basic Request:
+```bash
+curl -X POST http://localhost:8080/html-to-pdf \
+  -H "Content-Type: application/json" \
+  -d '{
+    "html": "<html><body><h1>Hello World</h1></body></html>"
+  }' \
+  --output document.pdf
+```
+
+#### With No Margins:
+```bash
+curl -X POST http://localhost:8080/html-to-pdf \
+  -H "Content-Type: application/json" \
+  -d '{
+    "html": "<html><body><h1>Hello World</h1></body></html>",
+    "options": {
+      "margin": null
+    }
+  }' \
+  --output no-margins.pdf
+```
+
+**JavaScript/Fetch Examples:**
+
+#### Basic Usage:
+```javascript
+const response = await fetch('/html-to-pdf', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    html: '<html><body><h1>Hello World</h1></body></html>'
+  })
+});
+
+const pdfBlob = await response.blob();
+const url = URL.createObjectURL(pdfBlob);
+window.open(url);
+```
+
+#### Advanced Usage:
+```javascript
+const response = await fetch('/html-to-pdf', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    html: `
+      <html>
+        <head>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              margin: 0; 
+              padding: 20px; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+            }
+            h1 { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <h1>Beautiful PDF</h1>
+          <p>This PDF has custom styling and no margins.</p>
+        </body>
+      </html>
+    `,
+    options: {
+      margin: null,
+      printBackground: true,
+      format: 'A4'
+    }
+  })
+});
+
+const pdfBlob = await response.blob();
+const url = URL.createObjectURL(pdfBlob);
+window.open(url);
+```
+
+**Response Format:**
+- **Content-Type:** `application/pdf`
+- **Content-Disposition:** `attachment; filename="document.pdf"`
+- **Body:** PDF file as binary data
+
+**Error Responses:**
+```json
+{
+  "error": "HTML content is required"
+}
+```
+
+```json
+{
+  "error": "Failed to convert HTML to PDF",
+  "details": "Error message details"
 }
 ```
 
