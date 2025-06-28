@@ -70,6 +70,12 @@ app.post('/html-to-pdf', async (req, res) => {
         return res.status(400).json({ error: 'HTML content is required' });
     }
 
+    // Debug logging
+    console.log('Received request body:', JSON.stringify(req.body, null, 2));
+    console.log('Options received:', options);
+    console.log('Margin value:', options.margin);
+    console.log('Margin type:', typeof options.margin);
+
     let page;
     try {
         // Ensure browser is available
@@ -98,22 +104,27 @@ app.post('/html-to-pdf', async (req, res) => {
         // Prepare PDF options
         const pdfOptions = {
             format: 'A4',
-            printBackground: true,
-            preferCSSPageSize: true
+            printBackground: true
         };
 
         // Handle margin configuration
-        if (options.margin === null) {
+        if (options.margin === null || options.margin === undefined) {
             // No margins - set all margins to 0
             pdfOptions.margin = {
-                top: '0in',
-                right: '0in',
-                bottom: '0in',
-                left: '0in'
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0
             };
+            // Don't use preferCSSPageSize when margins are explicitly set
+            pdfOptions.preferCSSPageSize = false;
+            console.log('Setting margins to 0 (no margins)');
         } else if (options.margin && typeof options.margin === 'object') {
             // Custom margins provided by user
             pdfOptions.margin = options.margin;
+            // Don't use preferCSSPageSize when margins are explicitly set
+            pdfOptions.preferCSSPageSize = false;
+            console.log('Setting custom margins:', options.margin);
         } else {
             // Default margins (0.5 inches on all sides)
             pdfOptions.margin = {
@@ -122,7 +133,12 @@ app.post('/html-to-pdf', async (req, res) => {
                 bottom: '0.5in',
                 left: '0.5in'
             };
+            // Use preferCSSPageSize for default behavior
+            pdfOptions.preferCSSPageSize = true;
+            console.log('Using default margins (0.5 inches)');
         }
+        
+        console.log('Final PDF options:', pdfOptions);
         
         // Generate PDF with configured options
         const pdfBuffer = await page.pdf(pdfOptions);
