@@ -102,6 +102,11 @@ app.post('/html-to-pdf', async (req, res) => {
         };
 
         // Handle margin configuration
+        console.log('=== MARGIN DEBUGGING ===');
+        console.log('options:', options);
+        console.log('options.margin:', options.margin);
+        console.log('typeof options.margin:', typeof options.margin);
+        
         if (options.margin) {
             if (typeof options.margin === 'number') {
                 // Single number - apply to all sides
@@ -112,9 +117,11 @@ app.post('/html-to-pdf', async (req, res) => {
                     bottom: marginValue,
                     left: marginValue
                 };
+                console.log('✅ Setting numeric margin:', marginValue, 'on all sides');
             } else if (typeof options.margin === 'object') {
                 // Object with specific values
                 pdfOptions.margin = options.margin;
+                console.log('✅ Setting custom margin object:', options.margin);
             }
             pdfOptions.preferCSSPageSize = false;
         } else {
@@ -126,7 +133,11 @@ app.post('/html-to-pdf', async (req, res) => {
                 left: '0px'
             };
             pdfOptions.preferCSSPageSize = true;
+            console.log('✅ Using default: NO MARGINS');
         }
+        
+        console.log('Final PDF options:', JSON.stringify(pdfOptions, null, 2));
+        console.log('=== END MARGIN DEBUGGING ===');
         
         // Generate PDF with configured options
         const pdfBuffer = await page.pdf(pdfOptions);
