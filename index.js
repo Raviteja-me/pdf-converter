@@ -22,17 +22,28 @@ app.get('/', (req, res) => {
     res.status(200).json({
         service: 'PDF Converter API',
         status: 'running',
-        endpoints: ['/html-to-pdf', '/text-to-pdf']
+        endpoints: ['/html-to-pdf', '/measure', '/text-to-pdf']
     });
 });
 
 // 初始化 Puppeteer 浏览器
 let browser;
-let browserInitializing = false;
+// A single in-flight initialisation, awaited by everyone who needs the browser.
+// This used to be a boolean that made concurrent callers give up: on a cold
+// start the browser takes several seconds to come up, so every request in that
+// window — the requests that caused the cold start — was answered with
+// "Failed to initialize browser".
+let browserInitPromise = null;
+
 const initBrowser = async () => {
-    if (browserInitializing) return null;
-    
-    browserInitializing = true;
+    if (browserInitPromise) return browserInitPromise;
+    browserInitPromise = launchBrowser().finally(() => {
+        browserInitPromise = null;
+    });
+    return browserInitPromise;
+};
+
+const launchBrowser = async () => {
     try {
         console.log('Initializing Puppeteer browser...');
         browser = await puppeteer.launch({
@@ -53,11 +64,9 @@ const initBrowser = async () => {
             }
         });
         console.log('Puppeteer browser initialized successfully');
-        browserInitializing = false;
         return browser;
     } catch (error) {
         console.error('Failed to initialize Puppeteer browser:', error);
-        browserInitializing = false;
         return null;
     }
 };
@@ -72,7 +81,13 @@ app.post('/html-to-pdf', async (req, res) => {
 
     let page;
     try {
-        // Ensure browser is available
+        // Ensure browser is available. Checked for a live connection, not just
+        // for existence: a crashed Chromium left a truthy handle behind and
+        // every request after it failed until the instance was replaced.
+        if (browser && browser.connected === false) {
+            console.log('Browser connection lost, discarding it');
+            browser = null;
+        }
         if (!browser) {
             console.log('Browser not initialized, attempting to initialize now...');
             browser = await initBrowser();
@@ -83,22 +98,36 @@ app.post('/html-to-pdf', async (req, res) => {
 
         page = await browser.newPage();
         
-        // Set content directly without viewport manipulation
+        // Set content directly without viewport manipulation.
+        //
+        // networkidle0 is the right wait for a document that pulls in remote
+        // images, stylesheets or web fonts. For a self-contained document it is
+        // the wrong one: there is no network activity to go idle, and on some
+        // Chrome builds the wait simply never resolves and the request dies on
+        // the navigation timeout. Callers that inline everything ask for the
+        // load event instead with fast: true.
         await page.setContent(html, {
-            waitUntil: 'networkidle0',
+            waitUntil: options.fast === true ? 'load' : 'networkidle0',
             timeout: 30000
         });
 
-        // Replace waitForTimeout with a compatible delay method
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // A fixed settle delay for documents that pull in remote assets. Every
+        // caller that inlines everything it needs can skip it with fast: true,
+        // which matters when one request renders a document more than once.
+        if (options.fast !== true) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
         
         // Ensure all content is properly rendered
         await page.evaluateHandle('document.fonts.ready');
         
         // Prepare PDF options
         const pdfOptions = {
-            format: 'A4',
-            printBackground: true
+            format: options.format || 'A4',
+            // Backgrounds print unless a caller explicitly turns them off.
+            // Resume designs are largely coloured panels and rules, so this
+            // defaulting to true is load-bearing.
+            printBackground: options.printBackground !== false
         };
 
         // Handle margin configuration
@@ -123,7 +152,7 @@ app.post('/html-to-pdf', async (req, res) => {
                 pdfOptions.margin = options.margin;
                 console.log('✅ Setting custom margin object:', options.margin);
             }
-            pdfOptions.preferCSSPageSize = false;
+            pdfOptions.preferCSSPageSize = options.preferCSSPageSize === true;
         } else {
             // Default: No margins
             pdfOptions.margin = {
@@ -132,9 +161,15 @@ app.post('/html-to-pdf', async (req, res) => {
                 bottom: '0px',
                 left: '0px'
             };
-            pdfOptions.preferCSSPageSize = true;
+            // The page's own @page rule wins. A document that declares its
+            // margins in CSS gets them on every page, which is the only way a
+            // second page opens with a top margin instead of flush against the
+            // paper edge.
+            pdfOptions.preferCSSPageSize = options.preferCSSPageSize !== false;
             console.log('✅ Using default: NO MARGINS');
         }
+
+        if (options.pageRanges) pdfOptions.pageRanges = String(options.pageRanges);
         
         console.log('Final PDF options:', JSON.stringify(pdfOptions, null, 2));
         console.log('=== END MARGIN DEBUGGING ===');
@@ -171,6 +206,130 @@ app.post('/html-to-pdf', async (req, res) => {
             } catch (e) {
                 console.error('Error closing page:', e);
             }
+        }
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Layout measurement, for Magic CV.
+//
+// Added because the caller previously had no way to find out whether the HTML
+// it sent would fit on a page. It had to guess the rendered height with a
+// hand-written model in Node, render, count pages in the PDF bytes, shrink and
+// render again — three round trips to answer a question the browser already
+// knows the answer to. This endpoint asks Chromium directly.
+//
+// The viewport is set to the page's own content box (A4 minus its margins), so
+// what is measured is the print layout rather than a 1920px-wide web layout.
+// Anything the document marks with data-fit is measured as the real content
+// bottom, which matters for layouts whose wrapper is stretched by a background
+// panel and would otherwise always report a full page.
+// ---------------------------------------------------------------------------
+
+const MM_TO_PX = 96 / 25.4;
+
+async function measureDocument(page, html, widthMm, heightMm) {
+    const widthPx = Math.round(widthMm * MM_TO_PX);
+    const heightPx = Math.round(heightMm * MM_TO_PX);
+
+    await page.setViewport({ width: widthPx, height: heightPx, deviceScaleFactor: 1 });
+    await page.setContent(html, { waitUntil: 'load', timeout: 30000 });
+    await page.evaluateHandle('document.fonts.ready');
+
+    return page.evaluate((availableHeightPx) => {
+        const doc = document.documentElement;
+
+        // Elements the document nominates as its content roots. Their own box
+        // includes their padding, which is where the page margin lives in the
+        // full-bleed layouts.
+        const roots = Array.from(document.querySelectorAll('[data-fit]'));
+        let contentBottomPx = 0;
+        for (const el of roots) {
+            const rect = el.getBoundingClientRect();
+            contentBottomPx = Math.max(contentBottomPx, rect.bottom + window.scrollY);
+        }
+        if (!roots.length) contentBottomPx = doc.scrollHeight;
+
+        // Anything sticking out sideways: a long unbroken URL or email address
+        // in a narrow column is the usual cause, and it silently clips in print.
+        const overflows = [];
+        for (const el of Array.from(document.body.querySelectorAll('*'))) {
+            if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0) {
+                overflows.push({
+                    tag: el.tagName.toLowerCase(),
+                    cls: String(el.className || '').slice(0, 60),
+                    by: el.scrollWidth - el.clientWidth,
+                });
+                if (overflows.length >= 5) break;
+            }
+        }
+
+        return {
+            contentBottomPx: Math.ceil(contentBottomPx),
+            scrollHeightPx: doc.scrollHeight,
+            availableHeightPx,
+            pages: Math.max(1, Math.ceil(contentBottomPx / availableHeightPx - 0.002)),
+            // How full the final page is. This is the number that tells the
+            // caller whether it produced a well-set page or one with a large
+            // blank foot, and it is what the old page-count-only feedback could
+            // never express.
+            lastPageFill:
+                Math.round(
+                    ((contentBottomPx % availableHeightPx) / availableHeightPx || 1) * 1000
+                ) / 1000,
+            fillRatio: Math.round((contentBottomPx / availableHeightPx) * 1000) / 1000,
+            overflows,
+        };
+    }, heightPx);
+}
+
+app.post('/measure', async (req, res) => {
+    const { html, htmls, widthMm = 182, heightMm = 267 } = req.body || {};
+    const documents = Array.isArray(htmls) ? htmls : html ? [html] : [];
+
+    if (!documents.length) {
+        return res.status(400).json({ error: 'html or htmls is required' });
+    }
+    if (documents.length > 8) {
+        return res.status(400).json({ error: 'At most 8 documents per request' });
+    }
+
+    let page;
+    try {
+        if (browser && browser.connected === false) browser = null;
+        if (!browser) {
+            browser = await initBrowser();
+            if (!browser) return res.status(500).json({ error: 'Failed to initialize browser' });
+        }
+
+        page = await browser.newPage();
+        // Print media, so @media print rules and page-break properties are the
+        // ones in force — measuring the screen layout would measure the wrong
+        // document. The method was renamed between Puppeteer majors, so both
+        // spellings are tried rather than pinning this file to one version.
+        if (typeof page.emulateMediaType === 'function') {
+            await page.emulateMediaType('print');
+        } else if (typeof page.emulateMedia === 'function') {
+            await page.emulateMedia({ media: 'print' });
+        }
+
+        // Several candidate documents share one page and one browser, which is
+        // what makes a search over type sizes cheap: the caller can bracket the
+        // fit in a single request instead of one request per attempt.
+        const results = [];
+        for (const doc of documents) {
+            results.push(await measureDocument(page, doc, Number(widthMm), Number(heightMm)));
+        }
+
+        res.json(Array.isArray(htmls) ? { results } : results[0]);
+    } catch (error) {
+        console.error('Measure Error:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to measure document', details: error.message });
+        }
+    } finally {
+        if (page) {
+            try { await page.close(); } catch (e) { console.error('Error closing page:', e); }
         }
     }
 });
